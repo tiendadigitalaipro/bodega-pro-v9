@@ -2403,7 +2403,7 @@ function checkMobile() {
 }
 
 // ─── AUTH ──────────────────────────────────────────────────────
-function doLogin() {
+async function doLogin() {
   const negocio = document.getElementById('ln-negocio').value.trim();
   const user    = document.getElementById('ln-user').value.trim();
   const pass    = document.getElementById('ln-pass').value;
@@ -2452,6 +2452,24 @@ function doLogin() {
       startApp();
       return;
     }
+    // Código no reconocido localmente — intentar contra el motor central A2K
+    // (cubre códigos emitidos desde WhatsApp u otro dispositivo, o de formato antiguo)
+    showLoginAlert('⏳ Verificando código...', 'success');
+    const centralNuevo = await verificarCodigoCentral(code);
+    if (centralNuevo.valid) {
+      const esDemoC = centralNuevo.tipo === 'DEMO';
+      DB.set('license', {
+        code: code, deviceId: DEVICE_ID,
+        activatedAt: new Date().toISOString(),
+        esDemo: esDemoC, venceEn: centralNuevo.venceEn,
+        tipo: esDemoC ? 'DEMO' : 'PRO', negocio: negocio,
+      });
+      const sessionC = { negocio, user, deviceId: DEVICE_ID, loginAt: new Date().toISOString() };
+      DB.set('session', sessionC);
+      STATE.user = sessionC;
+      startApp();
+      return;
+    }
     // Código inválido
     return showLoginAlert('❌ Código inválido o de versión anterior.\nSolicita un código nuevo a A2K Digital Studio: +58 416 411 7331', 'error');
   }
@@ -2464,8 +2482,14 @@ function doLogin() {
   // Verificar firma matemática — PRO o DEMO (cliente en otra PC, sin localStorage)
   const hasFirma     = verifyLicenseSignature(code);
   const hasFirmaDemo = (typeof verifyDemoSignature === 'function') && verifyDemoSignature(code);
+  var centralResult = null;
   if (!isMaster && !issuedLic && !hasFirma && !hasFirmaDemo) {
-    return showLoginAlert('❌ Código inválido o generado en una versión anterior.\nSolicita un código nuevo a A2K Digital Studio: +58 416 411 7331', 'error');
+    // Nada local lo reconoce — intentar contra el motor central A2K antes de rechazar
+    showLoginAlert('⏳ Verificando código...', 'success');
+    centralResult = await verificarCodigoCentral(code);
+    if (!centralResult.valid) {
+      return showLoginAlert('❌ Código inválido o generado en una versión anterior.\nSolicita un código nuevo a A2K Digital Studio: +58 416 411 7331', 'error');
+    }
   }
   // Verificar estado: bloqueada, pausada o vencida PRO
   if (!isMaster) {
@@ -2491,9 +2515,13 @@ function doLogin() {
   }
 
   // Determinar tipo de licencia
-  var esDemo = verifyDemoSignature(code);
+  // centralResult viene del motor central A2K cuando nada local reconoció el código
+  var esDemo = verifyDemoSignature(code) || (centralResult && centralResult.tipo === 'DEMO');
   var venceEn = null;
   if (esDemo) {
+    if (centralResult && centralResult.tipo === 'DEMO' && centralResult.venceEn) {
+      venceEn = centralResult.venceEn;
+    } else {
     // Buscar fecha en lista de licencias emitidas por el admin
     var issuedAll = getLicenses();
     var demoLic = issuedAll.find(function(l){ return l.code===code && l.tipo==='DEMO'; });
@@ -2502,6 +2530,7 @@ function doLogin() {
     } else {
       // No está en la lista — dar 3 días desde hoy (demo desconocida)
       var _ev=extraerVenceEnDeDemo(code); if(_ev){venceEn=_ev;}else{var vd=new Date();vd.setDate(vd.getDate()+3);venceEn=vd.toISOString();}
+    }
     }
   }
 
@@ -5313,12 +5342,18 @@ function mostrarPantallaBloqueo(lic, vence) {
   document.body.appendChild(overlay);
 }
 
-function activarConCodigoPro() {
+async function activarConCodigoPro() {
   var el = document.getElementById('codigoProInput');
   var codigo = el?el.value.trim().toUpperCase():'';
   if(!codigo){ showToast('Ingresa el codigo PRO','warn'); return; }
   var MASTER=[_dc([66,80,82,79,45,90,89,78,67,45,50,48,50,52]),_dc([66,80,82,79,45,65,66,73,71,45,50,48,50,52])];
-  if(!MASTER.includes(codigo)&&!verifyLicenseSignature(codigo)){
+  var esValido = MASTER.includes(codigo) || verifyLicenseSignature(codigo);
+  if (!esValido) {
+    showToast('Verificando codigo...', 'info');
+    var central = await verificarCodigoCentral(codigo);
+    esValido = central.valid;
+  }
+  if(!esValido){
     if(el){ el.style.border='2px solid var(--danger)'; el.value=''; el.placeholder='Codigo invalido...'; }
     showToast('Codigo PRO invalido.','error'); return;
   }
@@ -6416,6 +6451,27 @@ function extraerVenceEnDePRO(code) {
     diaAbsoluto = diaAbsoluto * b + CHARS.indexOf(sv[i]);
   }
   return new Date(diaAbsoluto * 86400000);
+}
+
+// ── MOTOR CENTRAL A2K (respaldo cuando la firma local no reconoce el código) ──
+// Códigos de versiones anteriores (ej. 5 segmentos) o emitidos desde WhatsApp/otro
+// dispositivo no tienen forma de validarse solo con matemática local — este es el
+// segundo intento antes de rechazar el código.
+var A2K_ENGINE_URL = 'https://a2k-license-engine.shoppingelectronics3112.workers.dev';
+async function verificarCodigoCentral(code) {
+  try {
+    var r = await fetch(A2K_ENGINE_URL + '/validar?key=' + encodeURIComponent(code) + '&product=bodega');
+    var d = await r.json();
+    if (d && d.valid) {
+      var venceEn = null;
+      if (d.type === 'demo' && d.daysLeft != null) {
+        var v = new Date(); v.setDate(v.getDate() + d.daysLeft); v.setHours(23,59,59,999);
+        venceEn = v.toISOString();
+      }
+      return { valid: true, tipo: d.type === 'demo' ? 'DEMO' : 'PRO', venceEn: venceEn };
+    }
+  } catch (e) { /* sin internet u motor no disponible — no bloquea, cae a inválido */ }
+  return { valid: false };
 }
 
 // ── BLOQUEAR LICENCIA ──
