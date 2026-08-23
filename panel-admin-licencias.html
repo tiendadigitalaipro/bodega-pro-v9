@@ -717,7 +717,7 @@ function compartirUltimaLicencia(){
   if(lic.deviceLocked) txt+='🔐 Equipo autorizado: '+lic.deviceLocked+'\n⚠️ Solo funciona en ese equipo\n';
   else txt+='💻 Terminales: '+lic.maxTerminales+'\n';
   if(lic.telefono) txt+='📞 Tel: '+lic.telefono+'\n';
-  txt+='━━━━━━━━━━━━━━━━━━━━━━\n📱 App: https://tiendadigitalaipro.github.io/bodega-pro-descarga.html/\n\n'
+  txt+='━━━━━━━━━━━━━━━━━━━━━━\n📱 App: https://github.com/tiendadigitalaipro/bodegapro/releases/latest/download/app-arm64-v8a-release.apk\n\n'
     +'⚠️ Código personal e intransferible.\n🆘 Soporte: +58 416 411 7331 — A2K Digital Studio';
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
@@ -727,6 +727,7 @@ function compartirUltimaDemo(){
   var txt='BODEGA PRO 8.0 — Demo Gratuita\n\nNegocio: '+lic.negocio+'\nCódigo DEMO: '+lic.code
     +'\nVálido por: '+lic.dias+' días\nVence: '+vence+'\n';
   if(lic.telefono) txt+='\nTel: '+lic.telefono;
+  txt+='\n📱 App: https://github.com/tiendadigitalaipro/bodegapro/releases/latest/download/app-arm64-v8a-release.apk';
   txt+='\n\nAl vencer tus datos quedan seguros. Activa PRO para continuar.\nSoporte: +58 416 411 7331\nA2K Digital Studio';
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
