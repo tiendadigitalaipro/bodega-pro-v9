@@ -2418,7 +2418,8 @@ async function doLogin() {
   const savedLicense = DB.get('license');
   if (savedLicense && savedLicense.deviceId === DEVICE_ID) {
     if (savedLicense.code === code) {
-      // Mismo código — login directo
+      // Mismo código — login directo (con revalidación online en segundo plano)
+      revalidarLicenciaOnline(code);
       const session = { negocio, user, deviceId: DEVICE_ID, loginAt: new Date().toISOString() };
       DB.set('session', session);
       STATE.user = session;
@@ -2469,6 +2470,9 @@ async function doLogin() {
       STATE.user = sessionC;
       startApp();
       return;
+    }
+    if (centralNuevo.reason === 'other_device') {
+      return showLoginAlert('🔒 Esta licencia está activa en OTRO dispositivo.\n\nSi cambiaste de PC o teléfono, solicita tu migración GRATIS:\nWhatsApp +58 416 411 7331 (indica tu código ' + code + ')', 'error');
     }
     // Código inválido
     return showLoginAlert('❌ Código inválido o de versión anterior.\nSolicita un código nuevo a A2K Digital Studio: +58 416 411 7331', 'error');
@@ -6458,11 +6462,20 @@ function extraerVenceEnDePRO(code) {
 // dispositivo no tienen forma de validarse solo con matemática local — este es el
 // segundo intento antes de rechazar el código.
 var A2K_ENGINE_URL = 'https://a2k-license-engine.shoppingelectronics3112.workers.dev';
+
+// v2 — Vinculación por dispositivo anti-fraude:
+// El motor ata la licencia al DEVICE_ID en la primera activación. Si el código
+// ya está activo en otro equipo, el motor responde other_device y se muestra
+// la pantalla de migración en vez de activar.
 async function verificarCodigoCentral(code) {
   try {
-    var r = await fetch(A2K_ENGINE_URL + '/validar?key=' + encodeURIComponent(code) + '&product=bodega');
+    var r = await fetch(A2K_ENGINE_URL + '/activar-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: code, product: 'bodega', deviceId: DEVICE_ID })
+    });
     var d = await r.json();
-    if (d && d.valid) {
+    if (d && d.ok) {
       var venceEn = null;
       if (d.type === 'demo' && d.daysLeft != null) {
         var v = new Date(); v.setDate(v.getDate() + d.daysLeft); v.setHours(23,59,59,999);
@@ -6470,8 +6483,26 @@ async function verificarCodigoCentral(code) {
       }
       return { valid: true, tipo: d.type === 'demo' ? 'DEMO' : 'PRO', venceEn: venceEn };
     }
+    if (d && d.reason === 'other_device') return { valid: false, reason: 'other_device' };
   } catch (e) { /* sin internet u motor no disponible — no bloquea, cae a inválido */ }
   return { valid: false };
+}
+
+// Revalidación en línea al abrir la app: si la licencia fue migrada a otro
+// dispositivo o fue revocada, este equipo se desconecta automáticamente.
+function revalidarLicenciaOnline(code) {
+  try {
+    fetch(A2K_ENGINE_URL + '/validar?key=' + encodeURIComponent(code) + '&product=bodega&deviceId=' + encodeURIComponent(DEVICE_ID))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d && d.valid === false) {
+          DB.del('license'); DB.del('session');
+          showLoginAlert('🔒 Tu licencia fue migrada a otro dispositivo o desactivada. Si no la solicitaste, escríbenos: +58 416 411 7331', 'error');
+          setTimeout(function(){ location.reload(); }, 3000);
+        }
+      })
+      .catch(function(){ /* offline: no bloquear */ });
+  } catch(e) {}
 }
 
 // ── BLOQUEAR LICENCIA ──
