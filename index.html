@@ -1292,7 +1292,7 @@ body.has-banner { padding-top:38px; }
 
         <div class="card mb-4 no-print">
           <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-            <input type="month" id="fiscal-periodo" class="form-input" style="max-width:170px" onchange="renderFiscalPage()">
+            <input type="month" id="fiscal-periodo" class="form-input" style="max-width:170px" onchange="fiscalManualPeriodo()">
             <button class="btn" onclick="fiscalSetPeriodo('mes')">Este mes</button>
             <button class="btn" onclick="fiscalSetPeriodo('pasado')">Mes pasado</button>
             <button class="btn" onclick="fiscalSetPeriodo('ano')">Este año</button>
@@ -8543,6 +8543,7 @@ window.initV9 = initV9;
 // ═══════════════════════════════════════════════════════════════════════════
 var FISCAL_METODOS_DIVISAS = ['Efectivo $', 'Zelle', 'Binance', 'Binance Pay', 'Zinli'];
 var FISCAL_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+var FISCAL_TODO = false; // true cuando el usuario eligio "Todo el historial"
 
 function fMoney(n) { return '$' + (n || 0).toFixed(2); }
 function fEscapeCSV(s) {
@@ -8574,14 +8575,23 @@ function fiscalSetPeriodo(tipo) {
   var input = document.getElementById('fiscal-periodo');
   if (tipo === 'mes') {
     input.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    FISCAL_TODO = false;
   } else if (tipo === 'pasado') {
     var d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     input.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    FISCAL_TODO = false;
   } else if (tipo === 'ano') {
     input.value = String(now.getFullYear());
+    FISCAL_TODO = false;
   } else if (tipo === 'todo') {
     input.value = '';
+    FISCAL_TODO = true;
   }
+  renderFiscalPage();
+}
+
+function fiscalManualPeriodo() {
+  FISCAL_TODO = false;
   renderFiscalPage();
 }
 
@@ -8658,7 +8668,7 @@ function fiscalStatCard(c1, c2, label, value, sub) {
 
 function renderFiscalPage() {
   var input = document.getElementById('fiscal-periodo');
-  if (input && !input.value) {
+  if (input && !input.value && !FISCAL_TODO) {
     var now = new Date();
     input.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   }
