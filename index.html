@@ -2178,8 +2178,8 @@ body.has-banner { padding-top:38px; }
 
 <script type="text/javascript">var _adminUnlocked = false;
 var _dc=function(a){return a.map(function(c){return String.fromCharCode(c);}).join('');};
-var APP_VERSION='v9.2';
-var APP_BUILD='20261122';
+var APP_VERSION='v9.2.1';
+var APP_BUILD='20261122b';
 
 
 function selPago(metodo) {
@@ -2920,10 +2920,15 @@ function renderDashboard() {
   const totalHoy = ventasHoy.reduce((s, v) => s + v.totalUSD, 0);
   const totalMes  = ventasMes.reduce((s, v) => s + v.totalUSD, 0);
   const gananciasHoy = ventasHoy.reduce((s, v) => {
-    return s + v.items.reduce((ss, it) => {
+    var gBruta = v.items.reduce((ss, it) => {
       const p = prods.find(p => p.id === it.productoId);
       return ss + (p ? (it.precio - p.costo) * it.qty : 0);
     }, 0);
+    var gDev = (v.itemsDevueltos || []).reduce((ss, d) => {
+      const p = prods.find(p => p.id === d.productoId);
+      return ss + (p ? d.subtotal - p.costo * d.qty : 0);
+    }, 0);
+    return s + (gBruta - gDev);
   }, 0);
 
   document.getElementById('statsGrid').innerHTML =
@@ -3628,10 +3633,19 @@ function showRecibo(venta) {
   var simb = STATE.simboloLocal || 'Bs';
   var logoHtml = fc.logo ? '<div style="text-align:center;margin-bottom:6px"><img src="'+fc.logo+'" style="max-width:120px;max-height:40px"></div>' : '';
   var rifHtml  = (fc.rif||cfg.rif) ? '<div style="font-size:10px">RIF: '+(fc.rif||cfg.rif)+'</div>' : '';
-  var itemsHtml = venta.items.map(function(it){
-    return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">'
-      + '<span>'+it.nombre+' x'+it.qty+'</span><span>$'+it.subtotal.toFixed(2)+'</span></div>';
-  }).join('');
+  var itemsHtml = (function(){
+    var _devQty = {};
+    (venta.itemsDevueltos||[]).forEach(function(d){ _devQty[d.productoId]=(_devQty[d.productoId]||0)+d.qty; });
+    var _h = venta.items.map(function(it){
+      var _qd = _devQty[it.productoId]||0;
+      var _qm = it.qty - _qd;
+      if (_qm <= 0) return '';
+      var _sm = it.precio * _qm;
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0">'
+        + '<span>'+it.nombre+' x'+_qm+(_qd>0?' ('+_qd+' dev.)':'')+'</span><span>$'+_sm.toFixed(2)+'</span></div>';
+    }).join('');
+    return _h || '<div style="font-size:11px;text-align:center;color:#555">(todos los productos devueltos)</div>';
+  })();
   var reciboHTML = '<div style="font-family:monospace;background:#fff;color:#000;padding:16px;border-radius:8px;max-width:340px;margin:0 auto">'
     + logoHtml
     + '<div style="text-align:center;font-weight:900;font-size:14px;margin-bottom:2px">'+negocioNombre+'</div>'
@@ -3641,6 +3655,7 @@ function showRecibo(venta) {
     + '<div style="text-align:center;font-size:11px">'+new Date(venta.fecha).toLocaleString('es-VE')+'</div>'
     + '<div style="border-top:1px solid #000;margin:6px 0"></div>'
     + '<div style="text-align:center;font-size:11px">Recibo #'+String(venta.id).slice(-6)+'</div>'
+    + (venta.devuelta ? '<div style="text-align:center;font-size:11px;font-weight:900;border:1px solid #000;margin:4px 0;padding:2px">★ VENTA DEVUELTA — VER NOTA DE CREDITO ★</div>' : (venta.devueltaParcial ? '<div style="text-align:center;font-size:10px;border:1px dashed #000;margin:4px 0;padding:2px">Devolucion parcial aplicada</div>' : ''))
     + '<div style="border-top:1px dashed #000;margin:6px 0"></div>'
     + itemsHtml
     + '<div style="border-top:2px solid #000;margin:6px 0"></div>'
@@ -3649,6 +3664,7 @@ function showRecibo(venta) {
     + '<div style="display:flex;justify-content:space-between;font-size:12px">'
     +   '<span>TOTAL '+simb+'</span><span>'+simb+' '+fmt(venta.totalBs||0)+'</span></div>'
     + '<div style="border-top:1px dashed #000;margin:6px 0"></div>'
+    + ((venta.itemsDevueltos&&venta.itemsDevueltos.length) ? '<div style="font-size:10px;color:#555">Devuelto: '+venta.itemsDevueltos.map(function(d){return d.qty+'x '+d.nombre;}).join(' · ')+'</div><div style="border-top:1px dashed #000;margin:6px 0"></div>' : '')
     + '<div style="text-align:center;font-size:11px">Metodo: '+venta.metodo+'</div>'
     + '<div style="text-align:center;font-size:11px;margin-top:4px">'+(fc.mensajePie||'Gracias por su compra!')+'</div>'
     + '</div>';
@@ -4440,10 +4456,15 @@ function renderReportes() {
   var totalHoy = ventasHoy.reduce(function(s,v){ return s+v.totalUSD; },0);
   var totalMes = ventasMes.reduce(function(s,v){ return s+v.totalUSD; },0);
   var ganancia = ventasMes.reduce(function(s,v){
-    return s + v.items.reduce(function(ss,it){
+    var gBruta = v.items.reduce(function(ss,it){
       var p = prods.find(function(p){ return p.id===it.productoId; });
       return ss + (p ? (it.precio - p.costo) * it.qty : 0);
     },0);
+    var gDev = (v.itemsDevueltos||[]).reduce(function(ss,d){
+      var p = prods.find(function(p){ return p.id===d.productoId; });
+      return ss + (p ? d.subtotal - p.costo * d.qty : 0);
+    },0);
+    return s + (gBruta - gDev);
   },0);
 
   var el = document.getElementById('reporteStats');
@@ -5372,11 +5393,18 @@ function imprimirReciboTermico(venta) {
   var negocioNombre = fc.negocio||cfg.negocio||(STATE.user?STATE.user.negocio:'Mi Negocio');
   var logoHtml = fc.logo?'<img src="'+fc.logo+'" style="max-width:60mm;max-height:22mm;display:block;margin:0 auto 4px">':'';
   var rifHtml  = (fc.rif||cfg.rif)?'<div style="text-align:center;font-size:10px">RIF: '+(fc.rif||cfg.rif)+'</div>':'';
+  var _devQtyT = {};
+  (venta.itemsDevueltos||[]).forEach(function(d){ _devQtyT[d.productoId]=(_devQtyT[d.productoId]||0)+d.qty; });
   var lineas = venta.items.map(function(it){
+    var _qd = _devQtyT[it.productoId]||0;
+    var _qm = it.qty - _qd;
+    if (_qm <= 0) return '';
+    var _sm = it.precio * _qm;
     return '<div style="display:flex;justify-content:space-between">'
-      +'<span>'+it.nombre.substring(0,20)+' x'+it.qty+'</span>'
-      +'<span>$'+(it.subtotal||0).toFixed(2)+'</span></div>';
+      +'<span>'+it.nombre.substring(0,20)+' x'+_qm+(_qd>0?' ('+_qd+' dev.)':'')+'</span>'
+      +'<span>$'+_sm.toFixed(2)+'</span></div>';
   }).join('');
+  if (!lineas) lineas = '<div style="text-align:center;font-size:10px;color:#333">(todos los productos devueltos)</div>';
   var bsLine = fc.mostrarBs!==false
     ?'<div style="display:flex;justify-content:space-between"><span>TOTAL '+(STATE.simboloLocal||'Bs')+'</span><span>'+(STATE.simboloLocal||'Bs')+' '+fmt((venta.totalBs||venta.totalUSD*tasa))+'</span></div>':'' ;
   var tasaLine = fc.mostrarTasa?'<div style="text-align:center;font-size:10px">Tasa: '+tasa+' '+(STATE.simboloLocal||'Bs')+'/$1</div>':'';
@@ -7545,11 +7573,9 @@ function checkVersionUpdate() {
   var banner = document.createElement('div');
   banner.id = 'update-banner';
   var novedades = [
-    '📊 Libro Fiscal SENIAT completo — Ventas, Compras, Diario Art.32 y Balance',
-    '🧮 IVA e IGTF 3% calculados automáticamente',
-    '🧾 RIF de proveedores en cada compra',
-    '🤝 Cobros de fiados registrados para tu contador',
-    '📤 Todo exporta a PDF o Excel — declara sin sacar cuentas'
+    '↩️ Devoluciones corregidas: la ganancia y el recibo ahora descuentan lo devuelto',
+    '🧾 Reimprimir factura muestra solo los productos que quedaron',
+    '📊 Libro Fiscal SENIAT disponible en Finanzas'
   ].map(function(n){ return '<li>'+n+'</li>'; }).join('');
   banner.innerHTML = '<span style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap;">'
     + '<strong>🚀 Bodega Pro '+APP_VERSION+' instalado</strong>'
@@ -7571,11 +7597,9 @@ function iaVerNovedades() {
     + '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text2)">✕</button>'
     + '</div>'
     + '<ul style="margin:0;padding-left:20px;line-height:2.2;font-size:13px;color:var(--text1)">'
-    + '<li>📊 <strong>Libro Fiscal SENIAT</strong> — Libro de Ventas, Compras, Diario (Art.32 C.Com), Mayor analítico y Balance de Comprobación</li>'
-    + '<li>🧮 <strong>IVA e IGTF 3%</strong> calculados automáticamente en cada operación</li>'
-    + '<li>🧾 <strong>RIF de proveedores</strong> registrado en cada compra</li>'
-    + '<li>🤝 <strong>Cobros de fiados</strong> ahora quedan como evento contable</li>'
-    + '<li>📤 <strong>Exporta PDF o Excel</strong> y entrégalo a tu contador — organiza tus declaraciones sin sacar cuentas</li>'
+    + '<li>↩️ <strong>Devoluciones corregidas</strong> — la ganancia del Dashboard y Reportes ahora descuenta lo devuelto; el stock seguía restaurándose igual que antes</li>'
+    + '<li>🧾 <strong>Reimprimir factura</strong> — el recibo (pantalla e impresora térmica) muestra solo los productos que quedaron; los devueltos quedan anotados con su nota de crédito</li>'
+    + '<li>📊 <strong>Libro Fiscal SENIAT</strong> — Libro de Ventas, Compras, Diario (Art.32), Mayor y Balance, con PDF/Excel para tu contador</li>'
     + '<li>🔔 Notificación automática de actualizaciones</li>'
     + '</ul>'
     + '<button onclick="this.closest(\'[style*=fixed]\').remove()" class="btn btn-primary" style="width:100%;margin-top:18px;">¡Entendido!</button>'
