@@ -8638,6 +8638,9 @@ function fEscapeCSV(s) {
   s = String(s == null ? '' : s);
   return '"' + s.replace(/"/g, '""') + '"';
 }
+function fEscHTML(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 function fiscalCfg() {
   var c = DB.get('fiscal_config') || {};
@@ -8879,8 +8882,8 @@ function fiscalRenderLibroVentas(d) {
     var igtf = esDiv ? total * cfg.igtf / 100 : 0;
     bruto += total; ivaT += iva; igtfT += igtf; baseT += base;
     return '<tr><td>' + (v.fecha || '').substring(0, 10) + '</td><td>' + (d.numFac[v.id] || '') + '</td><td>' +
-      (v.cliente ? (d.nomCli[v.cliente] || '—') : 'Consumidor final') + '</td><td>' +
-      (v.cliente ? (d.rifCli[v.cliente] || '—') : '—') + '</td><td>' + base.toFixed(2) + '</td><td>' +
+      (v.cliente ? fEscHTML(d.nomCli[v.cliente] || '—') : 'Consumidor final') + '</td><td>' +
+      (v.cliente ? fEscHTML(d.rifCli[v.cliente] || '—') : '—') + '</td><td>' + base.toFixed(2) + '</td><td>' +
       iva.toFixed(2) + '</td><td>' + (igtf ? igtf.toFixed(2) : '—') + '</td><td>' + total.toFixed(2) + '</td></tr>';
   }).join('');
   document.getElementById('fiscalLibroVentas').innerHTML = rows
@@ -8897,8 +8900,8 @@ function fiscalRenderLibroCompras(d) {
     var total = pg.monto || 0;
     var base = total / factor, iva = total - base;
     bruto += total; ivaT += iva; baseT += base;
-    return '<tr><td>' + (pg.fecha || '').substring(0, 10) + '</td><td>' + (pg.factura ? fEscapeCSV(pg.factura) : '—') + '</td><td>' +
-      fEscapeCSV(pg.proveedor || '') + '</td><td>' + (d.rifProvPorNombre[pg.proveedor] || '—') + '</td><td>' + base.toFixed(2) + '</td><td>' +
+    return '<tr><td>' + (pg.fecha || '').substring(0, 10) + '</td><td>' + (pg.factura ? fEscHTML(pg.factura) : '—') + '</td><td>' +
+      fEscHTML(pg.proveedor || '') + '</td><td>' + fEscHTML(d.rifProvPorNombre[pg.proveedor] || '—') + '</td><td>' + base.toFixed(2) + '</td><td>' +
       iva.toFixed(2) + '</td><td>' + total.toFixed(2) + '</td></tr>';
   }).join('');
   document.getElementById('fiscalLibroCompras').innerHTML = rows
@@ -8910,7 +8913,7 @@ function fiscalRenderDiario(d) {
   var tD = 0, tH = 0;
   var rows = d.movs.map(function (m) {
     tD += m.debe; tH += m.haber;
-    return '<tr><td>' + m.asiento + '</td><td>' + (m.fecha || '').substring(0, 10) + '</td><td>' + fEscapeCSV(m.concepto) + '</td><td>' +
+    return '<tr><td>' + m.asiento + '</td><td>' + (m.fecha || '').substring(0, 10) + '</td><td>' + fEscHTML(m.concepto) + '</td><td>' +
       m.cuenta + '</td><td>' + (m.debe ? m.debe.toFixed(2) : '') + '</td><td>' + (m.haber ? m.haber.toFixed(2) : '') + '</td></tr>';
   }).join('');
   document.getElementById('fiscalLibroDiario').innerHTML = rows
@@ -8934,7 +8937,7 @@ function fiscalRenderMayor(d) {
     var saldo = 0;
     var rows = porCuenta[c].map(function (m) {
       saldo += m.debe - m.haber;
-      return '<tr><td>' + (m.fecha || '').substring(0, 10) + '</td><td>' + fEscapeCSV(m.concepto) + '</td><td>' +
+      return '<tr><td>' + (m.fecha || '').substring(0, 10) + '</td><td>' + fEscHTML(m.concepto) + '</td><td>' +
         (m.debe ? m.debe.toFixed(2) : '') + '</td><td>' + (m.haber ? m.haber.toFixed(2) : '') + '</td><td>' + saldo.toFixed(2) + '</td></tr>';
     }).join('');
     return '<div class="card fiscal-mayor-card">' +
