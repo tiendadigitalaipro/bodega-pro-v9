@@ -850,6 +850,9 @@ body.has-banner { padding-top:38px; }
       <div class="nav-item" onclick="showPage('reportes',this)" data-page="reportes">
         <span class="nav-icon">📈</span><span class="nav-label">Reportes</span>
       </div>
+      <div class="nav-item" onclick="showPage('fiscal',this)" data-page="fiscal">
+        <span class="nav-icon">📊</span><span class="nav-label">Libro Fiscal</span>
+      </div>
       <div class="nav-item" onclick="showPage('ia',this)" data-page="ia">
         <span class="nav-icon">🤖</span><span class="nav-label">Asistente IA</span>
       </div>
@@ -1258,6 +1261,84 @@ body.has-banner { padding-top:38px; }
         <div class="card">
           <div class="card-header"><span class="card-title">📦 Inventario por Categoría</span></div>
           <div class="chart-wrap" style="height:180px"><canvas id="chartCateg"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ═══ LIBRO FISCAL SENIAT ═══ -->
+      <div id="page-fiscal" style="display:none">
+        <style>
+          @media print {
+            aside, .topbar, .no-print { display: none !important; }
+            .main-content { margin-left: 0 !important; padding: 0 !important; }
+            body { background: #fff !important; }
+            .card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; }
+            .fiscal-head-print { display: block !important; }
+          }
+          .fiscal-head-print { display: none; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #333; }
+          .fiscal-info-box { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; font-size: 12.5px; line-height: 1.65; color: var(--text2); }
+          .fiscal-info-box strong { color: var(--text); }
+        </style>
+
+        <div class="flex justify-between items-center mb-4 no-print" style="flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="section-title">📊 Libro Fiscal</div>
+            <div class="section-sub" style="margin-bottom:0">Resumen SENIAT: IVA, IGTF e ISLR — listo para entregar a tu contador</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="fiscalExportarCSV()">⬇ Exportar Excel (CSV)</button>
+            <button class="btn btn-primary" onclick="fiscalImprimir()" style="background:var(--neon)">🖨 Imprimir / PDF</button>
+          </div>
+        </div>
+
+        <div class="card mb-4 no-print">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+            <input type="month" id="fiscal-periodo" class="form-input" style="max-width:170px" onchange="renderFiscalPage()">
+            <button class="btn" onclick="fiscalSetPeriodo('mes')">Este mes</button>
+            <button class="btn" onclick="fiscalSetPeriodo('pasado')">Mes pasado</button>
+            <button class="btn" onclick="fiscalSetPeriodo('ano')">Este año</button>
+            <button class="btn" onclick="fiscalSetPeriodo('todo')">Todo el historial</button>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span style="font-size:12px;color:var(--text2);font-weight:700">Tasas:</span>
+              <label style="font-size:12px;color:var(--text2)">IVA %</label>
+              <input type="number" id="fiscal-iva" class="form-input" style="width:72px" step="0.5" onchange="fiscalGuardarCfg()">
+              <label style="font-size:12px;color:var(--text2)">IGTF %</label>
+              <input type="number" id="fiscal-igtf" class="form-input" style="width:72px" step="0.5" onchange="fiscalGuardarCfg()">
+            </div>
+          </div>
+        </div>
+
+        <div id="fiscalPrintArea">
+          <div class="fiscal-head-print" id="fiscalHeadPrint"></div>
+          <div class="grid-4 mb-4" id="fiscalStats"></div>
+          <div class="grid-2 mb-4">
+            <div class="card">
+              <div class="card-header"><span class="card-title">🗓 Resumen por Mes</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Mes</th><th>Ventas</th><th>IVA</th><th>Ventas netas</th><th>Divisas</th><th>IGTF</th><th>Nº</th></tr></thead>
+                  <tbody id="fiscalMeses"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><span class="card-title">💳 Ventas por Método de Pago</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Método</th><th>Nº ventas</th><th>Total</th></tr></thead>
+                  <tbody id="fiscalMetodos"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">🧾 Guía rápida para tu contador</span></div>
+            <div style="padding:6px 2px">
+              <div class="fiscal-info-box" id="fiscalNotaIva"></div>
+              <div class="fiscal-info-box" id="fiscalNotaIgtf"></div>
+              <div class="fiscal-info-box" id="fiscalNotaIslr"></div>
+              <div class="fiscal-info-box" id="fiscalNotaExtra" style="margin-bottom:0"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2713,7 +2794,7 @@ function showPage(page, el) {
     historial:'Historial de Ventas', devoluciones:'Devoluciones',
     caja:'Gestión de Caja', clientes:'Clientes y Fiados',
     reportes:'Reportes', configuracion:'Configuración', proveedores:'Proveedores',
-    ia:'Asistente IA'
+    ia:'Asistente IA', fiscal:'Libro Fiscal'
   };
   stext('topbarTitle', titles[page] || page);
   STATE.currentPage = page;
@@ -2724,6 +2805,7 @@ function showPage(page, el) {
   if (page === 'historial') { renderHistorial(); renderHistStats(); }
   if (page === 'clientes') renderClientes();
   if (page === 'reportes') renderReportes();
+  if (page === 'fiscal') renderFiscalPage();
   if (page === 'devoluciones') renderDevolucionesPage();
   if (page === 'caja') renderCajaPage();
   if (page === 'proveedores') renderProveedoresPage();
@@ -8454,4 +8536,251 @@ window.initV9 = initV9;
   window.cerrarModalPinDueno     = window.cerrarModalPinDueno;
 
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LIBRO FISCAL SENIAT — IVA / IGTF / ISLR (módulo aditivo, solo lectura de datos
+// existentes; escribe únicamente la llave nueva 'fiscal_config')
+// ═══════════════════════════════════════════════════════════════════════════
+var FISCAL_METODOS_DIVISAS = ['Efectivo $', 'Zelle', 'Binance', 'Binance Pay', 'Zinli'];
+var FISCAL_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function fMoney(n) { return '$' + (n || 0).toFixed(2); }
+function fEscapeCSV(s) {
+  s = String(s == null ? '' : s);
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
+function fiscalCfg() {
+  var c = DB.get('fiscal_config') || {};
+  return {
+    iva:  (typeof c.iva  === 'number' && !isNaN(c.iva))  ? c.iva  : 16,
+    igtf: (typeof c.igtf === 'number' && !isNaN(c.igtf)) ? c.igtf : 3
+  };
+}
+
+function fiscalGuardarCfg() {
+  var c = fiscalCfg();
+  var iva  = parseFloat(document.getElementById('fiscal-iva').value);
+  var igtf = parseFloat(document.getElementById('fiscal-igtf').value);
+  if (!isNaN(iva))  c.iva  = iva;
+  if (!isNaN(igtf)) c.igtf = igtf;
+  DB.set('fiscal_config', c);
+  renderFiscalPage();
+  showToast('✅ Tasas fiscales guardadas (IVA ' + c.iva + '% · IGTF ' + c.igtf + '%)', 'success');
+}
+
+function fiscalSetPeriodo(tipo) {
+  var now = new Date();
+  var input = document.getElementById('fiscal-periodo');
+  if (tipo === 'mes') {
+    input.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  } else if (tipo === 'pasado') {
+    var d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    input.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  } else if (tipo === 'ano') {
+    input.value = String(now.getFullYear());
+  } else if (tipo === 'todo') {
+    input.value = '';
+  }
+  renderFiscalPage();
+}
+
+function fiscalPeriodoActual() {
+  var el = document.getElementById('fiscal-periodo');
+  return el ? (el.value || '') : '';
+}
+
+function fiscalPeriodoLabel() {
+  var per = fiscalPeriodoActual();
+  if (!per) return 'Todo el historial';
+  if (per.length === 4) return 'Año ' + per;
+  var y = per.substring(0, 4), m = parseInt(per.substring(5, 7), 10);
+  return FISCAL_MESES[m - 1] + ' ' + y;
+}
+
+function fiscalFiltrarPorPeriodo(arr) {
+  var per = fiscalPeriodoActual();
+  if (!per) return arr || [];
+  return (arr || []).filter(function (x) { return (x.fecha || '').substring(0, per.length) === per; });
+}
+
+function fiscalCalc() {
+  var cfg = fiscalCfg();
+  var factor = 1 + cfg.iva / 100;
+  var ventas = fiscalFiltrarPorPeriodo(DB.get('ventas') || []);
+
+  var t = { n: 0, bruto: 0, iva: 0, neto: 0, divisas: 0, igtf: 0, devoluciones: 0, compras: 0, pagosProv: 0, egresos: 0, cxc: 0, cxp: 0 };
+  var porMes = {}, porMetodo = {};
+
+  ventas.forEach(function (v) {
+    var total = v.totalUSD || 0;
+    var iva = total - total / factor;
+    var esDiv = FISCAL_METODOS_DIVISAS.indexOf(v.metodo) >= 0;
+    t.n++; t.bruto += total; t.iva += iva; t.neto += total / factor;
+    if (esDiv) { t.divisas += total; t.igtf += total * cfg.igtf / 100; }
+    var mes = (v.fecha || '').substring(0, 7) || '—';
+    if (!porMes[mes]) porMes[mes] = { bruto: 0, iva: 0, neto: 0, divisas: 0, igtf: 0, n: 0 };
+    porMes[mes].bruto += total; porMes[mes].iva += iva; porMes[mes].neto += total / factor; porMes[mes].n++;
+    if (esDiv) { porMes[mes].divisas += total; porMes[mes].igtf += total * cfg.igtf / 100; }
+    var met = v.metodo || '—';
+    if (!porMetodo[met]) porMetodo[met] = { n: 0, total: 0, div: 0 };
+    porMetodo[met].n++; porMetodo[met].total += total; if (esDiv) porMetodo[met].div += total;
+  });
+
+  // Devoluciones (notas de crédito) del período
+  var ncs = fiscalFiltrarPorPeriodo(DB.get('notasCredito') || []);
+  t.devoluciones = ncs.reduce(function (s, x) { return s + (x.totalUSD || 0); }, 0);
+
+  // Compras = mercancía recibida (deuda registrada); pagos = dinero salido a proveedores
+  var pagosProv = fiscalFiltrarPorPeriodo(DB.get('pagos_proveedores') || []);
+  t.compras    = pagosProv.filter(function (x) { return x.tipo === 'deuda'; }).reduce(function (s, x) { return s + (x.monto || 0); }, 0);
+  t.pagosProv  = pagosProv.filter(function (x) { return x.tipo === 'pago';  }).reduce(function (s, x) { return s + (x.monto || 0); }, 0);
+
+  // Egresos de caja del período (pagos a proveedores, devoluciones y gastos manuales)
+  var movs = fiscalFiltrarPorPeriodo(DB.get('caja_movimientos') || []);
+  t.egresos = movs.filter(function (x) { return x.tipo === 'salida' || x.tipo === 'egreso'; })
+                  .reduce(function (s, x) { return s + Math.abs(x.monto || 0); }, 0);
+
+  // Cuentas por cobrar / por pagar (saldo vivo, sin filtro de fecha)
+  t.cxc = (DB.get('clientes') || []).reduce(function (s, c) { return s + (c.deuda || 0); }, 0);
+  t.cxp = (DB.get('proveedores') || []).reduce(function (s, p) { return s + (p.deudaPendiente || 0); }, 0);
+
+  return { cfg: cfg, t: t, porMes: porMes, porMetodo: porMetodo, ventas: ventas };
+}
+
+function fiscalStatCard(c1, c2, label, value, sub) {
+  return '<div class="stat-card" style="--c1:' + c1 + ';--c2:' + c2 + '">' +
+    '<div class="stat-label">' + label + '</div>' +
+    '<div class="stat-val">' + value + '</div>' +
+    (sub ? '<div class="stat-sub">' + sub + '</div>' : '') +
+    '</div>';
+}
+
+function renderFiscalPage() {
+  var input = document.getElementById('fiscal-periodo');
+  if (input && !input.value) {
+    var now = new Date();
+    input.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  }
+  var cfg = fiscalCfg();
+  var ivaInput = document.getElementById('fiscal-iva');
+  var igtfInput = document.getElementById('fiscal-igtf');
+  if (ivaInput && document.activeElement !== ivaInput) ivaInput.value = cfg.iva;
+  if (igtfInput && document.activeElement !== igtfInput) igtfInput.value = cfg.igtf;
+
+  var d = fiscalCalc();
+  var t = d.t;
+
+  // Encabezado para impresión/PDF
+  var cfgNeg = DB.get('config') || {};
+  var negocio = cfgNeg.negocio || (STATE.user && STATE.user.negocio) || 'Mi Negocio';
+  document.getElementById('fiscalHeadPrint').innerHTML =
+    '<div style="font-size:20px;font-weight:800">' + negocio + '</div>' +
+    '<div style="font-size:12px;color:#555">RIF: ' + (cfgNeg.rif || '—') + (cfgNeg.telefono ? ' · Tel: ' + cfgNeg.telefono : '') + '</div>' +
+    '<div style="font-size:13px;margin-top:4px"><strong>📊 Libro Fiscal — Período: ' + fiscalPeriodoLabel() + '</strong></div>' +
+    '<div style="font-size:11px;color:#777">Generado el ' + new Date().toLocaleDateString('es-VE') + ' por Bodega Pro</div>';
+
+  // Tarjetas resumen
+  document.getElementById('fiscalStats').innerHTML =
+    fiscalStatCard('var(--neon)',   'var(--accent)',  '💰 Ventas brutas',     fMoney(t.bruto), t.n + ' ventas') +
+    fiscalStatCard('var(--accent)', 'var(--neonb)',   '🧾 IVA (' + cfg.iva + '%)', fMoney(t.iva), 'desglosado de tus ventas') +
+    fiscalStatCard('var(--success)','var(--neon)',    '📉 Ventas netas',      fMoney(t.neto), 'base imponible IVA/ISLR') +
+    fiscalStatCard('var(--neonb)',  'var(--accent)',  '💵 Cobros en divisas', fMoney(t.divisas), 'efectivo $, Zelle, Binance…') +
+    fiscalStatCard('var(--danger)', 'var(--accent)',  '🏦 IGTF estimado',     fMoney(t.igtf), cfg.igtf + '% sobre divisas') +
+    fiscalStatCard('var(--accent)', 'var(--danger)',  '📦 Compras registradas', fMoney(t.compras), 'mercancía recibida') +
+    fiscalStatCard('var(--warning)','var(--accent)',  '🤝 Fiados por cobrar', fMoney(t.cxc), 'cuentas x cobrar') +
+    fiscalStatCard('var(--neonb)',  'var(--success)', '🏭 Deuda proveedores', fMoney(t.cxp), 'cuentas x pagar');
+
+  // Tabla por mes
+  var meses = Object.keys(d.porMes).sort();
+  var htmlMeses = meses.map(function (m) {
+    var r = d.porMes[m];
+    var y = m.substring(0, 4), mo = parseInt(m.substring(5, 7), 10);
+    var label = (!isNaN(mo) && FISCAL_MESES[mo - 1]) ? FISCAL_MESES[mo - 1] + ' ' + y : m;
+    return '<tr><td>' + label + '</td><td>' + fMoney(r.bruto) + '</td><td>' + fMoney(r.iva) + '</td><td>' +
+      fMoney(r.neto) + '</td><td>' + fMoney(r.divisas) + '</td><td>' + fMoney(r.igtf) + '</td><td>' + r.n + '</td></tr>';
+  }).join('');
+  document.getElementById('fiscalMeses').innerHTML = htmlMeses ||
+    '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin ventas en este período</td></tr>';
+
+  // Tabla por método de pago
+  var metodos = Object.keys(d.porMetodo).sort(function (a, b) { return d.porMetodo[b].total - d.porMetodo[a].total; });
+  var htmlMet = metodos.map(function (m) {
+    var r = d.porMetodo[m];
+    var marca = FISCAL_METODOS_DIVISAS.indexOf(m) >= 0 ? ' 💵' : '';
+    return '<tr><td>' + m + marca + '</td><td>' + r.n + '</td><td>' + fMoney(r.total) + '</td></tr>';
+  }).join('');
+  document.getElementById('fiscalMetodos').innerHTML = htmlMet ||
+    '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px">Sin ventas en este período</td></tr>';
+
+  // Notas para el contador
+  document.getElementById('fiscalNotaIva').innerHTML =
+    '<strong>🧾 IVA (' + cfg.iva + '%):</strong> tus precios ya incluyen IVA. Aquí está desglosado automáticamente: ' +
+    '<strong>Ventas netas ' + fMoney(t.neto) + ' + IVA ' + fMoney(t.iva) + ' = Total cobrado ' + fMoney(t.bruto) + '</strong>. ' +
+    'Ese IVA es el que se declara.';
+  document.getElementById('fiscalNotaIgtf').innerHTML =
+    '<strong>🏦 IGTF (' + cfg.igtf + '%):</strong> se genera al cobrar en divisas (efectivo $, Zelle, Binance…). Cobraste ' +
+    fMoney(t.divisas) + ' en divisas → IGTF estimado <strong>' + fMoney(t.igtf) + '</strong>. Se paga cuando depositas en el banco, ' +
+    'y tu contador lo descuenta como crédito fiscal contra el IVA.';
+  document.getElementById('fiscalNotaIslr').innerHTML =
+    '<strong>📉 ISLR:</strong> la base imponible estimada son las ventas netas (' + fMoney(t.neto) + '). ' +
+    'El ISLR exacto lo calcula tu contador según tu régimen y gastos deducibles (compras ' + fMoney(t.compras) + ', egresos de caja ' + fMoney(t.egresos) + ').';
+  document.getElementById('fiscalNotaExtra').innerHTML =
+    '<strong>🤝 Cuentas por cobrar ' + fMoney(t.cxc) + '</strong> (fiados) y <strong>cuentas por pagar ' + fMoney(t.cxp) + '</strong> (proveedores). ' +
+    'Devoluciones del período: ' + fMoney(t.devoluciones) + '. <br><strong>⚠️ Resumen orientativo</strong> generado por Bodega Pro — ' +
+    'la declaración formal la realiza tu contador con las retenciones y créditos fiscales que te correspondan.';
+}
+
+function fiscalExportarCSV() {
+  var d = fiscalCalc();
+  var cfg = d.cfg, t = d.t;
+  var factor = 1 + cfg.iva / 100;
+  var lineas = [];
+  lineas.push('LIBRO FISCAL - ' + fiscalPeriodoLabel());
+  var cfgNeg = DB.get('config') || {};
+  lineas.push('Negocio:;' + fEscapeCSV(cfgNeg.negocio || '') + ';RIF:;' + fEscapeCSV(cfgNeg.rif || ''));
+  lineas.push('Generado:;' + new Date().toLocaleString('es-VE'));
+  lineas.push('');
+  lineas.push('RESUMEN;;;;;;');
+  lineas.push('Ventas brutas;IVA ' + cfg.iva + '%;Ventas netas;Divisas cobradas;IGTF ' + cfg.igtf + '% estimado;Compras;Fiados por cobrar;Deuda proveedores');
+  lineas.push(
+    t.bruto.toFixed(2) + ';' + t.iva.toFixed(2) + ';' + t.neto.toFixed(2) + ';' +
+    t.divisas.toFixed(2) + ';' + t.igtf.toFixed(2) + ';' + t.compras.toFixed(2) + ';' +
+    t.cxc.toFixed(2) + ';' + t.cxp.toFixed(2)
+  );
+  lineas.push('');
+  lineas.push('DETALLE DE VENTAS;;;;;;;');
+  lineas.push('Fecha;Venta #;Metodo;Total;Base (neto);IVA;Divisa;IGTF estimado');
+  d.ventas.forEach(function (v) {
+    var total = v.totalUSD || 0;
+    var esDiv = FISCAL_METODOS_DIVISAS.indexOf(v.metodo) >= 0;
+    var igtfV = esDiv ? total * cfg.igtf / 100 : 0;
+    lineas.push(
+      fEscapeCSV((v.fecha || '').substring(0, 10)) + ';' +
+      fEscapeCSV(String(v.id).slice(-6)) + ';' +
+      fEscapeCSV(v.metodo || '') + ';' +
+      total.toFixed(2) + ';' +
+      (total / factor).toFixed(2) + ';' +
+      (total - total / factor).toFixed(2) + ';' +
+      (esDiv ? 'SI' : 'NO') + ';' +
+      igtfV.toFixed(2)
+    );
+  });
+  var csv = '﻿' + lineas.join('\r\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'LibroFiscal_' + (fiscalPeriodoActual() || 'todo') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('⬇ Excel (CSV) descargado — entrégalo a tu contador', 'success');
+}
+
+function fiscalImprimir() {
+  showPage('fiscal');
+  setTimeout(function () { window.print(); }, 400);
+}
+
+window.renderFiscalPage = window.renderFiscalPage;
 </script>
