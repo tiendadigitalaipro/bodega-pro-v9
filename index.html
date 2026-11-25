@@ -1289,6 +1289,60 @@ body.has-banner { padding-top:38px; }
           .fiscal-mayor-card .mayor-saldo { font-weight: 800; }
         </style>
 
+        <!-- ===================== FACTURACIÓN ELECTRÓNICA PRO (SENIAT) ===================== -->
+        <div class="card mb-4 no-print" id="fproPanel" style="border:1px solid rgba(29,78,216,.35)">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div>
+              <div class="card-title">🧾 Facturación Electrónica Pro <span style="font-size:11px;font-weight:800;color:var(--neon)">SENIAT</span></div>
+              <div class="section-sub" style="margin-bottom:0">Emite facturas legales con N° de control y QR a través de tu imprenta digital autorizada (HKA, Unidigital, 421 u otra)</div>
+            </div>
+            <span id="fproPlanBadge" style="font-size:12px;font-weight:800;padding:4px 10px;border-radius:20px;background:rgba(148,163,184,.15)">…</span>
+          </div>
+          <div style="padding:14px">
+            <div id="fproEstado" style="font-size:13px;color:var(--text2);margin-bottom:12px">Consultando tu plan…</div>
+
+            <details style="margin-bottom:12px;font-size:13px">
+              <summary style="cursor:pointer;font-weight:700;color:var(--text)">❓ ¿Cómo contrato mi imprenta digital?</summary>
+              <div style="margin-top:8px;color:var(--text2);line-height:1.7">
+                1️⃣ Elige y contrata una imprenta digital autorizada por el SENIAT (ej. <b>The Factory HKA</b>, <b>Unidigital</b>, <b>Imprentas 421</b>). Ese servicio se paga aparte, directamente a la imprenta.<br>
+                2️⃣ Necesitas tu <b>RIF activo</b> y designar la imprenta ante el SENIAT (portal seniat.gob.ve).<br>
+                3️⃣ Pide a tu imprenta las <b>credenciales de API</b> (URL, usuario/clave o token).<br>
+                4️⃣ Pégalas aquí abajo y pulsa <b>Probar conexión</b>.
+              </div>
+            </details>
+
+            <div class="grid-2" style="gap:10px">
+              <div><label style="font-size:12px;font-weight:700;color:var(--text2)">PROVEEDOR DE IMPRENTA</label>
+                <select id="fproProveedor" class="form-input">
+                  <option value="mock">🧪 Modo prueba (sin imprenta — NO legal)</option>
+                  <option value="otro">Otra imprenta (conexión por API/HTTP)</option>
+                  <option value="hka">The Factory HKA (próximamente)</option>
+                </select></div>
+              <div><label style="font-size:12px;font-weight:700;color:var(--text2)">RIF DEL EMISOR</label>
+                <input type="text" id="fproRif" class="form-input" placeholder="V123456789 / J405555555"></div>
+              <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:700;color:var(--text2)">RAZÓN SOCIAL EMISOR</label>
+                <input type="text" id="fproRazon" class="form-input" placeholder="Nombre legal del negocio"></div>
+              <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:700;color:var(--text2)">URL DE LA API DE LA IMPRENTA</label>
+                <input type="text" id="fproApiUrl" class="form-input" placeholder="https://api.tuimprenta.com/facturas"></div>
+              <div><label style="font-size:12px;font-weight:700;color:var(--text2)">API KEY / TOKEN (opcional)</label>
+                <input type="text" id="fproApiKey" class="form-input" placeholder=""></div>
+              <div><label style="font-size:12px;font-weight:700;color:var(--text2)">USUARIO (opcional)</label>
+                <input type="text" id="fproUsuario" class="form-input" placeholder=""></div>
+              <div><label style="font-size:12px;font-weight:700;color:var(--text2)">CONTRASEÑA (opcional)</label>
+                <input type="password" id="fproClave" class="form-input" placeholder=""></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="fiscalProGuardar()">💾 Guardar configuración</button>
+              <button class="btn" onclick="fiscalProProbar()" style="background:var(--neon);color:#000">🔌 Probar conexión</button>
+              <span id="fproMsg" style="font-size:13px;align-self:center;color:var(--text2)"></span>
+            </div>
+            <div style="font-size:11px;color:var(--text2);margin-top:10px;opacity:.85">
+              Tus credenciales se guardan <b>cifradas</b> en la nube de A2K (nunca en este equipo) y solo se usan para emitir tus facturas.
+            </div>
+          </div>
+        </div>
+        <!-- =================== FIN FACTURACIÓN ELECTRÓNICA PRO =================== -->
+
         <div class="flex justify-between items-center mb-4 no-print" style="flex-wrap:wrap;gap:10px">
           <div>
             <div class="section-title">📊 Libro Fiscal</div>
@@ -2883,6 +2937,7 @@ function showPage(page, el) {
   document.querySelectorAll('[id^="page-"]').forEach(function(p){ p.style.display = 'none'; });
   var targetPage = document.getElementById('page-' + page);
   if (targetPage) targetPage.style.display = 'block';
+  if (page === 'fiscal' && typeof fiscalProCargar === 'function') fiscalProCargar();
   var pb = document.getElementById('pageBody'); if (pb) pb.scrollTop = 0;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
@@ -6850,6 +6905,94 @@ function revalidarLicenciaOnline(code) {
       .catch(function(){ /* offline: no bloquear */ });
   } catch(e) {}
 }
+
+// ── FACTURACIÓN ELECTRÓNICA PRO (SENIAT) — config vía Fiscal Relay ──
+// El relay guarda las credenciales de imprenta cifradas en la nube,
+// valida la licencia contra el motor y hace de cola de contingencia.
+var FPRO_URL = 'https://a2k-fiscal-relay.shoppingelectronics3112.workers.dev';
+
+function fproCred() {
+  var lic = DB.get('license') || {};
+  return { key: lic.code || '', product: 'bodega', deviceId: DEVICE_ID };
+}
+
+function fiscalProCargar() {
+  var c = fproCred();
+  var est = document.getElementById('fproEstado');
+  if (!est) return;
+  if (!c.key) { est.textContent = 'Activa tu licencia para configurar la facturación electrónica.'; return; }
+  fetch(FPRO_URL + '/fiscal/plan?key=' + encodeURIComponent(c.key) + '&product=' + c.product + '&deviceId=' + encodeURIComponent(c.deviceId))
+    .then(function(r){ return r.json(); })
+    .then(function(p){
+      var badge = document.getElementById('fproPlanBadge');
+      if (p && p.ok && p.plan === 'pro') {
+        badge.textContent = 'PLAN PRO';
+        est.innerHTML = p.emision_habilitada
+          ? '✅ Emisión fiscal <b>activada</b> — tus facturas salen con N° de control y QR legales.'
+          : '⭐ Plan Pro: falta firmar el contrato de licencia para encender la emisión fiscal.';
+      } else {
+        badge.textContent = 'PLAN BÁSICO';
+        est.innerHTML = '🔒 La emisión de facturas legales requiere el <b>Plan Pro</b> (escríbenos al +58 416 411 7331). Tu Libro Fiscal interno de abajo sigue disponible para tu contador.';
+      }
+    })
+    .catch(function(){ est.textContent = 'Sin conexión con el servidor fiscal (se reintenta al abrir esta pestaña).'; });
+  fetch(FPRO_URL + '/fiscal/config?key=' + encodeURIComponent(c.key) + '&product=' + c.product + '&deviceId=' + encodeURIComponent(c.deviceId))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d && d.ok && d.configurado && d.config) {
+        var cfg = d.config;
+        document.getElementById('fproProveedor').value = cfg.proveedor || 'otro';
+        document.getElementById('fproRif').value = cfg.rif_emisor || '';
+        document.getElementById('fproRazon').value = cfg.razon_social || '';
+        document.getElementById('fproApiUrl').value = cfg.api_url || '';
+        if (cfg.api_key) document.getElementById('fproApiKey').placeholder = 'guardada (' + cfg.api_key + ')';
+        document.getElementById('fproUsuario').value = cfg.usuario || '';
+        if (cfg.contrasena) document.getElementById('fproClave').placeholder = 'guardada (' + cfg.contrasena + ')';
+      }
+    })
+    .catch(function(){});
+}
+
+function fiscalProGuardar() {
+  var c = fproCred();
+  var msg = document.getElementById('fproMsg');
+  if (!c.key) { showToast('Activa tu licencia primero', 'warn'); return; }
+  msg.textContent = 'Guardando…';
+  var body = {
+    key: c.key, product: c.product, deviceId: c.deviceId,
+    proveedor: document.getElementById('fproProveedor').value,
+    rif_emisor: document.getElementById('fproRif').value.trim(),
+    razon_social: document.getElementById('fproRazon').value.trim(),
+    credenciales: {
+      api_url: document.getElementById('fproApiUrl').value.trim(),
+      api_key: document.getElementById('fproApiKey').value.trim(),
+      usuario: document.getElementById('fproUsuario').value.trim(),
+      contrasena: document.getElementById('fproClave').value
+    }
+  };
+  fetch(FPRO_URL + '/fiscal/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d && d.ok) { msg.textContent = '✅ Guardado cifrado en la nube'; showToast('Configuración fiscal guardada', 'ok'); fiscalProCargar(); }
+      else { msg.textContent = '❌ ' + ((d && d.error) || 'no se pudo guardar'); }
+    })
+    .catch(function(){ msg.textContent = '❌ sin conexión'; });
+}
+
+function fiscalProProbar() {
+  var c = fproCred();
+  var msg = document.getElementById('fproMsg');
+  msg.textContent = 'Probando…';
+  fetch(FPRO_URL + '/fiscal/probar-conexion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d && d.ok && d.resultado && d.resultado.ok) { msg.textContent = '✅ ' + (d.resultado.mensaje || 'Conexión OK'); return; }
+      var det = (d && d.resultado && (d.resultado.error + (d.resultado.detalle ? ' — ' + d.resultado.detalle : ''))) || (d && d.error) || 'falló';
+      msg.textContent = '❌ ' + det;
+    })
+    .catch(function(){ msg.textContent = '❌ sin conexión'; });
+}
+// ── FIN FACTURACIÓN ELECTRÓNICA PRO ──
 
 // ── BLOQUEAR LICENCIA ──
 function bloquearLicencia(id) {
