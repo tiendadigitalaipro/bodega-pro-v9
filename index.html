@@ -2592,6 +2592,38 @@ window.onload = function() {
 
   stext('deviceIdDisplay', 'Tu Device ID: ' + DEVICE_ID);
 
+  // ── AUTO-DEMO (?demo=1) — entrada directa desde la bio de TikTok ──
+  // Aditivo: no modifica la verificación de licencias; solo siembra una
+  // licencia DEMO local (mismo formato del panel) + sesión demo de 5 días.
+  try {
+    if (/[?&]demo=1/.test(location.search)) {
+      var _adLic = DB.get('license');
+      var _adAhora = new Date();
+      var _adVencida = _adLic && _adLic.esDemo && _adLic.venceEn && _adAhora > new Date(_adLic.venceEn);
+      if (!_adLic || _adVencida) {
+        var _adV = new Date(); _adV.setDate(_adV.getDate() + 5);
+        DB.set('license', {
+          code: (typeof generateDemoCode === 'function') ? generateDemoCode('DEMO WEB', 5) : 'DEMO-WEB-AUTO',
+          deviceId: DEVICE_ID,
+          activatedAt: _adAhora.toISOString(),
+          esDemo: true,
+          venceEn: _adV.toISOString(),
+          tipo: 'DEMO',
+          negocio: 'Mi Negocio (Demo)'
+        });
+      }
+      var _adSes = DB.get('session');
+      if (!_adSes || _adSes.deviceId !== DEVICE_ID) {
+        DB.set('session', {
+          negocio: 'Mi Negocio (Demo)',
+          user: 'demo',
+          deviceId: DEVICE_ID,
+          loginAt: _adAhora.toISOString()
+        });
+      }
+    }
+  } catch (e) { console.warn('auto-demo:', e); }
+
   const session = DB.get('session');
   if (session && session.deviceId === DEVICE_ID) {
     STATE.user = session;
